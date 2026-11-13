@@ -23,7 +23,7 @@ body {
     linear-gradient(135deg, var(--bg) 0%, var(--bg2) 100%);
 }
 
-/* SETUP SCREEN */
+/* SETUP */
 .setup {
   position:fixed; inset:0; z-index:100;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -59,12 +59,6 @@ body {
   box-shadow:0 8px 24px rgba(238,82,83,0.4);
 }
 .btn-start:hover { transform:translateY(-2px); }
-.btn-secondary {
-  width:100%; padding:16px; background:#fff; color:#ee5253;
-  border:2px solid #ffd93d; border-radius:12px; font-size:1rem;
-  font-weight:900; cursor:pointer; text-transform:uppercase;
-  margin-top:10px;
-}
 
 /* APP */
 .app { height:100vh; display:flex; flex-direction:column; padding:12px; gap:12px; }
@@ -322,11 +316,8 @@ body {
   <p class="sub">Panel Juri — buat room, tampilkan QR, kontrol permainan</p>
   <div class="setup-card">
     <h2>👨‍⚖️ Masuk sebagai Juri</h2>
-    <p class="sub2">Buat room baru, atau gabung sebagai juri pendukung dengan kode room.</p>
-    <label>Kode Room (kosongkan untuk buat baru)</label>
-    <input type="text" id="juriRoomCodeInput" placeholder="Contoh: 482913" maxlength="6" inputmode="numeric">
-    <button class="btn-start" onclick="joinAsJuri()">MASUK / BUAT ROOM</button>
-    <button class="btn-secondary" onclick="window.location.href='peserta.html'">Saya Peserta →</button>
+    <p class="sub2">Buat room baru. Kode room langsung aktif dan bisa dipakai peserta.</p>
+    <button class="btn-start" onclick="createRoom()">BUAT ROOM BARU</button>
   </div>
 </div>
 
@@ -401,10 +392,6 @@ body {
     <div class="panel" id="juriPanel">
       <h2>👨‍⚖️ Panel Juri</h2>
 
-      <div style="font-size:0.72rem; font-weight:800; color:#a55eea; text-align:center; padding:8px; background:#f5e8ff; border-radius:8px;" id="juriInfo">
-        👑 JURI UTAMA
-      </div>
-
       <div class="joined-panel">
         <h3>🟢 Peserta Masuk <span id="joinedCount" style="background:#26de81; color:white; padding:2px 8px; border-radius:10px; font-size:0.65rem;">0</span></h3>
         <div class="joined-list" id="joinedList">
@@ -454,14 +441,14 @@ body {
 <div class="modal-overlay hidden" id="qrModal">
   <div class="modal">
     <h2>📱 Scan QR untuk Masuk</h2>
-    <p class="sub">Peserta scan QR ini dengan kamera HP — link otomatis terbuka.</p>
+    <p class="sub">Peserta scan QR ini dengan kamera HP — halaman peserta terbuka dengan kode terisi.</p>
     <div class="qr-modal-body">
       <div class="qr-frame"><div id="qrCanvas"></div></div>
       <div class="qr-code-text" id="qrCodeText">------</div>
       <div class="qr-link" id="qrLink"></div>
       <div class="qr-hint">
         💡 <strong>Cara pakai:</strong><br>
-        Buka kamera HP → arahkan ke QR → tap notifikasi link → halaman peserta terbuka dengan kode terisi.
+        Buka kamera HP → arahkan ke QR → tap notifikasi link → halaman peserta terbuka otomatis dengan kode terisi → pilih regu.
       </div>
       <div class="qr-actions">
         <button class="btn-primary" onclick="copyRoomLink()">📋 SALIN LINK</button>
@@ -480,13 +467,15 @@ body {
 </div>
 
 <script>
+/* ============================================================
+   JURI — host room, kontrol permainan, PeerJS host otomatis
+   ============================================================ */
 const TEAM_COLORS = ['#ff4757','#ff9f43','#26de81','#45aaf2','#a55eea','#fd79a8','#f6c90e','#4ecdc4','#dfe6e9'];
 const TEAM_NAMES  = ['Merah','Oranye','Hijau','Biru','Ungu','Pink','Kuning','Tosca','Putih'];
 const MIN_TEAMS = 2;
 const MAX_TEAMS = 9;
 
 const state = {
-  role: 'juri',
   roomCode: null,
   deviceId: localStorage.getItem('sb_juri_device') || (() => {
     const id = 'JURI-' + Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -503,7 +492,6 @@ const state = {
   answerTimer: null,
   settings: { roundDuration: 30, answerDuration: 15 },
   history: [],
-  isPrimary: true,
   bc: null,
   peer: null,
   connections: {},
@@ -512,6 +500,7 @@ const state = {
   _lastTick: null
 };
 
+/* UTIL */
 function generateRoomCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -548,20 +537,14 @@ function loadRoom(code) {
 function initBC() {
   if ('BroadcastChannel' in window) {
     try {
-      state.bc = new BroadcastChannel('smartbuzzer_v3');
+      state.bc = new BroadcastChannel('smartbuzzer_v4');
       state.bc.onmessage = (ev) => handleBusMessage(ev.data);
     } catch (_) {}
   }
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'sb_bus_msg' && e.newValue) {
-      try { handleBusMessage(JSON.parse(e.newValue)); } catch (_) {}
-    }
-  });
 }
 
 function busSend(msg) {
   if (state.bc) { try { state.bc.postMessage(msg); } catch (_) {} }
-  try { localStorage.setItem('sb_bus_msg', JSON.stringify({ ...msg, _ts: Date.now() })); } catch (_) {}
   Object.values(state.connections).forEach(conn => {
     if (conn && conn.open) { try { conn.send(msg); } catch (_) {} }
   });
@@ -575,24 +558,29 @@ function handleBusMessage(msg) {
     case 'PESERTA_JOIN':
       if (msg.roomCode !== state.roomCode) return;
       if (!state.devices[msg.deviceId] && Object.keys(state.devices).length >= state.totalReguAktif) {
-        busSend({ type:'PESERTA_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Room penuh' });
+        const conn = state.connections[msg.peerId];
+        if (conn) conn.send({ type:'PESERTA_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Room penuh' });
         return;
       }
       state.devices[msg.deviceId] = {
         deviceId: msg.deviceId, teamId: null, teamName: null, joinedAt: Date.now()
       };
       saveRoom();
-      busSend({ type: 'STATE_FULL', from: state.deviceId, to: msg.deviceId, roomCode: state.roomCode });
+      const conn1 = state.connections[msg.peerId];
+      if (conn1 && conn1.open) {
+        conn1.send({ type: 'STATE_FULL', from: state.deviceId, to: msg.deviceId, roomCode: state.roomCode });
+      }
       renderJuriPanel();
       renderJoined();
-      showToast(`🟢 Peserta ${msg.deviceId} masuk`, 'ok');
+      showToast(`🟢 ${msg.deviceId} terhubung`, 'ok');
       break;
 
     case 'PESERTA_CLAIM':
       if (msg.roomCode !== state.roomCode) return;
       const occupant = Object.values(state.devices).find(d => d.teamId === msg.teamId && d.deviceId !== msg.deviceId);
       if (occupant) {
-        busSend({ type:'PESERTA_CLAIM_REJECT', from: state.deviceId, to: msg.deviceId, teamId: msg.teamId, reason: 'Regu sudah dipakai' });
+        const conn2 = state.connections[msg.peerId];
+        if (conn2 && conn2.open) conn2.send({ type:'PESERTA_CLAIM_REJECT', from: state.deviceId, to: msg.deviceId, teamId: msg.teamId, reason: 'Regu sudah dipakai' });
         return;
       }
       if (state.devices[msg.deviceId]) {
@@ -600,7 +588,10 @@ function handleBusMessage(msg) {
         state.devices[msg.deviceId].teamName = state.teams[msg.teamId].name;
       }
       saveRoom();
-      busSend({ type:'PESERTA_CLAIM_ACCEPT', from: state.deviceId, to: msg.deviceId, teamId: msg.teamId });
+      const conn3 = state.connections[msg.peerId];
+      if (conn3 && conn3.open) {
+        conn3.send({ type:'PESERTA_CLAIM_ACCEPT', from: state.deviceId, to: msg.deviceId, teamId: msg.teamId });
+      }
       renderJuriPanel();
       renderJoined();
       showToast(`✅ ${msg.deviceId} → ${state.teams[msg.teamId].name}`, 'ok');
@@ -609,24 +600,23 @@ function handleBusMessage(msg) {
     case 'PESERTA_BUZZ':
       if (msg.roomCode !== state.roomCode) return;
       if (!state.buzzerArmed) {
-        busSend({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Bel belum dibuka' });
+        const conn4 = state.connections[msg.peerId];
+        if (conn4 && conn4.open) conn4.send({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Bel belum dibuka' });
         return;
       }
       if (state.activeTeam !== null) {
-        busSend({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Sudah ada yang lebih dulu' });
+        const conn5 = state.connections[msg.peerId];
+        if (conn5 && conn5.open) conn5.send({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Sudah ada yang lebih dulu' });
         return;
       }
       const p = state.devices[msg.deviceId];
-      if (!p || p.teamId === null) {
-        busSend({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Pilih regu dulu' });
-        return;
-      }
+      if (!p || p.teamId === null) return;
+
       state.activeTeam = p.teamId;
       state.buzzerArmed = false;
       state.roundTimer = null;
       state.answerTimer = { endsAt: Date.now() + state.settings.answerDuration * 1000, duration: state.settings.answerDuration, teamId: p.teamId };
 
-      // Auto-ganti kode jika regu berbeda
       let codeChanged = false;
       if (state.lastBuzzTeam !== null && state.lastBuzzTeam !== p.teamId) {
         const oldCode = state.roomCode;
@@ -637,14 +627,19 @@ function handleBusMessage(msg) {
         busSend({ type: 'CODE_CHANGED', from: state.deviceId, oldCode, newCode });
         document.getElementById('roomCodeDisplay').textContent = newCode;
         showToast('🔑 Kode room berganti: ' + newCode, 'ok');
+        updateURL();
         if (!document.getElementById('qrModal').classList.contains('hidden')) showQRCode();
+        // Re-init Peer dengan kode baru
+        reinitPeer();
       }
       state.lastBuzzTeam = p.teamId;
       state.history.push({ time: Date.now(), teamId: p.teamId, teamName: state.teams[p.teamId].name });
       saveRoom();
-      busSend({ type:'PESERTA_BUZZ_ACCEPT', from: state.deviceId, to: msg.deviceId, teamId: p.teamId, codeChanged });
-      busSend({ type:'STATE_FULL', from: state.deviceId, roomCode: state.roomCode });
-
+      const conn6 = state.connections[msg.peerId];
+      if (conn6 && conn6.open) {
+        conn6.send({ type:'PESERTA_BUZZ_ACCEPT', from: state.deviceId, to: msg.deviceId, teamId: p.teamId, codeChanged });
+      }
+      broadcastState();
       renderJuriPanel();
       renderStage();
       SFX.buzz(p.teamId);
@@ -662,7 +657,18 @@ function handleBusMessage(msg) {
   }
 }
 
-/* PEERJS */
+function broadcastState() {
+  const payload = {
+    type: 'STATE_FULL',
+    from: state.deviceId,
+    roomCode: state.roomCode
+  };
+  Object.values(state.connections).forEach(conn => {
+    if (conn && conn.open) { try { conn.send(payload); } catch (_) {} }
+  });
+}
+
+/* PEERJS HOST */
 function initPeer() {
   return new Promise((resolve) => {
     if (typeof Peer === 'undefined') { resolve(null); return; }
@@ -683,24 +689,37 @@ function initPeer() {
       state.peer.on('error', (err) => {
         console.warn('PeerJS error:', err.type);
         updateNetStatus(false);
+        // Jika ID sudah dipakai (mis. duplikat room), coba kode lain
+        if (err.type === 'unavailable-id') {
+          showToast('⚠️ Kode room sudah dipakai. Membuat kode baru...', 'warn');
+          setTimeout(() => resetRoomCode(), 1000);
+        }
         resolve(null);
       });
       state.peer.on('connection', (conn) => {
         conn.on('open', () => {
           state.connections[conn.peer] = conn;
-          conn.on('data', (data) => handleBusMessage({ ...data, from: conn.peer }));
-          updatePeerCount();
-        });
-        conn.on('close', () => {
-          delete state.connections[conn.peer];
+          conn.on('data', (data) => {
+            handleBusMessage({ ...data, from: conn.peer, peerId: conn.peer });
+          });
+          conn.on('close', () => {
+            delete state.connections[conn.peer];
+            updatePeerCount();
+          });
           updatePeerCount();
         });
       });
-      setTimeout(() => resolve(state.peer), 4000);
+      setTimeout(() => resolve(state.peer), 5000);
     } catch (e) {
       resolve(null);
     }
   });
+}
+
+function reinitPeer() {
+  if (state.peer) try { state.peer.destroy(); } catch (_) {}
+  state.connections = {};
+  initPeer();
 }
 
 function updateNetStatus(ok) {
@@ -714,7 +733,7 @@ function updatePeerCount() {
   if (el) el.textContent = `• ${Object.keys(state.connections).length} peer`;
 }
 
-/* INIT */
+/* INIT ROOM */
 function initTeams(n) {
   state.teams = [];
   for (let i = 0; i < n; i++) {
@@ -722,49 +741,24 @@ function initTeams(n) {
   }
 }
 
-async function joinAsJuri() {
-  const code = document.getElementById('juriRoomCodeInput').value.trim();
+async function createRoom() {
+  state.roomCode = generateRoomCode();
+  initTeams(MIN_TEAMS);
+  state.totalReguAktif = MIN_TEAMS;
+  saveRoom();
 
-  if (!code) {
-    state.roomCode = generateRoomCode();
-    initTeams(MIN_TEAMS);
-    state.totalReguAktif = MIN_TEAMS;
-    state.isPrimary = true;
-    saveRoom();
-    document.getElementById('setup').style.display = 'none';
-    document.getElementById('app').classList.remove('hidden');
-    document.getElementById('roomCodeDisplay').textContent = state.roomCode;
-    renderJuriPanel();
-    renderJoined();
-    renderStage();
-    startTimerLoop();
-    showToast('✅ Room dibuat. Kode: ' + state.roomCode, 'ok');
-    await initPeer();
-    updateURL();
-  } else {
-    const saved = loadRoom(code);
-    if (!saved) {
-      showToast('❌ Kode room tidak ditemukan di perangkat ini.', 'error');
-      return;
-    }
-    state.roomCode = code;
-    state.teams = saved.teams;
-    state.totalReguAktif = saved.totalReguAktif;
-    state.devices = saved.devices || {};
-    state.settings = saved.settings || state.settings;
-    state.isPrimary = false;
-    document.getElementById('setup').style.display = 'none';
-    document.getElementById('app').classList.remove('hidden');
-    document.getElementById('roomCodeDisplay').textContent = state.roomCode;
-    document.getElementById('juriInfo').textContent = '👥 JURI PENDUKUNG';
-    renderJuriPanel();
-    renderJoined();
-    renderStage();
-    startTimerLoop();
-    showToast('✅ Masuk sebagai JURI PENDUKUNG', 'ok');
-    await initPeer();
-    updateURL();
-  }
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('roomCodeDisplay').textContent = state.roomCode;
+
+  renderJuriPanel();
+  renderJoined();
+  renderStage();
+  startTimerLoop();
+  updateURL();
+
+  showToast('✅ Room dibuat. Kode: ' + state.roomCode, 'ok');
+  await initPeer();
 }
 
 function updateURL() {
@@ -938,6 +932,7 @@ function armBuzzer() {
   state.answerTimer = null;
   saveRoom();
   busSend({ type: 'ARM', from: state.deviceId, roomCode: state.roomCode });
+  broadcastState();
   renderJuriPanel();
   renderStage();
   SFX.click();
@@ -949,6 +944,7 @@ function armBuzzer() {
       state.roundTimer = null;
       saveRoom();
       busSend({ type: 'RESET', from: state.deviceId });
+      broadcastState();
       renderJuriPanel();
       renderStage();
       showToast('⏰ Waktu ronde habis!', 'warn');
@@ -967,6 +963,7 @@ function evaluate(correct) {
   state.answerTimer = null;
   saveRoom();
   busSend({ type: 'EVALUATE', from: state.deviceId, roomCode: state.roomCode });
+  broadcastState();
   renderJuriPanel();
   renderStage();
 }
@@ -978,6 +975,7 @@ function resetRound() {
   state.answerTimer = null;
   saveRoom();
   busSend({ type: 'RESET', from: state.deviceId });
+  broadcastState();
   renderJuriPanel();
   renderStage();
   showToast('🔄 Ronde direset', 'ok');
@@ -990,6 +988,7 @@ function lockBuzzer() {
   state.answerTimer = null;
   saveRoom();
   busSend({ type: 'LOCK', from: state.deviceId });
+  broadcastState();
   renderJuriPanel();
   renderStage();
   showToast('🔒 Bel dikunci', 'ok');
@@ -1021,6 +1020,7 @@ function setTeamCount(n) {
   }
   saveRoom();
   busSend({ type: 'TEAM_COUNT', from: state.deviceId, roomCode: state.roomCode });
+  broadcastState();
   renderJuriPanel();
   renderJoined();
   showToast(`👥 Jumlah kelompok: ${n}`, 'ok');
@@ -1043,11 +1043,7 @@ function resetRoomCode() {
   showToast('🔑 Kode baru: ' + newCode, 'ok');
   updateURL();
   if (!document.getElementById('qrModal').classList.contains('hidden')) showQRCode();
-
-  // Re-init peer dengan ID baru
-  if (state.peer) try { state.peer.destroy(); } catch (_) {}
-  state.connections = {};
-  initPeer();
+  reinitPeer();
 }
 
 function kickAll() {
@@ -1055,6 +1051,7 @@ function kickAll() {
   state.devices = {};
   saveRoom();
   busSend({ type: 'RESET', from: state.deviceId });
+  broadcastState();
   renderJuriPanel();
   renderJoined();
   showToast('🚫 Semua peserta dikeluarkan', 'warn');
@@ -1067,6 +1064,7 @@ function releaseTeam(teamId) {
   delete state.devices[d.deviceId];
   saveRoom();
   busSend({ type: 'TEAM_COUNT', from: state.deviceId });
+  broadcastState();
   renderJuriPanel();
   renderJoined();
   showToast('🔓 Regu dilepas', 'ok');
@@ -1076,6 +1074,7 @@ function startRoundTimer() {
   state.roundTimer = { endsAt: Date.now() + state.settings.roundDuration * 1000, duration: state.settings.roundDuration };
   saveRoom();
   busSend({ type: 'ARM', from: state.deviceId });
+  broadcastState();
 }
 
 function pauseTimer() {
@@ -1083,6 +1082,7 @@ function pauseTimer() {
   state.answerTimer = null;
   saveRoom();
   busSend({ type: 'RESET', from: state.deviceId });
+  broadcastState();
 }
 
 function resetTimer(which) {
@@ -1093,7 +1093,6 @@ function resetTimer(which) {
 
 /* QR */
 function buildRoomURL() {
-  // Arahkan ke peserta.html dengan ?room=XXXXXX
   const base = location.origin + location.pathname.replace(/juri\.html$/, 'peserta.html');
   return base + '?room=' + state.roomCode;
 }
@@ -1194,15 +1193,6 @@ document.addEventListener('keydown', e => {
 
 initBC();
 updateNetStatus(false);
-
-// Auto-join jika URL punya ?room= dan ada room tersimpan
-try {
-  const params = new URLSearchParams(location.search);
-  const r = params.get('room');
-  if (r && loadRoom(r)) {
-    document.getElementById('juriRoomCodeInput').value = r;
-  }
-} catch (_) {}
 </script>
 </body>
 </html>
