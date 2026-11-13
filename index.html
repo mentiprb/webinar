@@ -1,1 +1,1208 @@
-BELAJAR KIMIA
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMART BUZZER — Juri</title>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#fff8e7; --bg2:#ffeaa7; --yellow:#ffd93d; --yellow-soft:#fff3b0;
+  --red:#ff6b6b; --red-soft:#ffb3b3; --green:#26de81; --purple:#a55eea;
+  --text:#2d2d2d; --text-soft:#6b6b6b; --dim:#999;
+}
+html, body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; color:var(--text); overflow:hidden; }
+body {
+  background:
+    radial-gradient(ellipse at 20% 0%, var(--yellow-soft) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, var(--red-soft) 0%, transparent 50%),
+    linear-gradient(135deg, var(--bg) 0%, var(--bg2) 100%);
+}
+
+/* SETUP SCREEN */
+.setup {
+  position:fixed; inset:0; z-index:100;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:20px; overflow-y:auto;
+  background: linear-gradient(135deg, #fff8e7 0%, #ffeaa7 100%);
+}
+.setup h1 {
+  font-size:clamp(2rem,7vw,4rem); font-weight:900; text-align:center;
+  background:linear-gradient(90deg,#ee5253,#f6c90e,#ee5253);
+  background-size:200% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+  animation:shine 3s linear infinite; margin-bottom:10px;
+}
+@keyframes shine { to { background-position:200% 0; } }
+.setup .sub { color:#6b6b6b; font-size:1.05rem; margin-bottom:30px; text-align:center; max-width:520px; }
+.setup-card {
+  background:#fff; border:3px solid #ffd93d; border-radius:24px;
+  padding:30px; max-width:520px; width:100%;
+  box-shadow:0 20px 60px rgba(238,82,83,0.15);
+}
+.setup-card h2 { font-size:1.4rem; color:#ee5253; margin-bottom:6px; text-align:center; }
+.setup-card .sub2 { text-align:center; color:#6b6b6b; margin-bottom:20px; font-size:0.88rem; }
+.setup-card label { display:block; font-size:0.75rem; color:#6b6b6b; margin-bottom:6px; font-weight:800; text-transform:uppercase; }
+.setup-card input {
+  width:100%; padding:14px; background:#fff; border:2px solid #ffeaa7;
+  border-radius:12px; font-size:1rem; font-family:inherit; font-weight:700;
+  margin-bottom:16px; outline:none;
+}
+.setup-card input:focus { border-color:#ff6b6b; }
+.btn-start {
+  width:100%; padding:16px; background:linear-gradient(135deg,#ff6b6b,#ee5253);
+  border:none; border-radius:12px; color:white; font-size:1rem;
+  font-weight:900; cursor:pointer; letter-spacing:1px; text-transform:uppercase;
+  box-shadow:0 8px 24px rgba(238,82,83,0.4);
+}
+.btn-start:hover { transform:translateY(-2px); }
+.btn-secondary {
+  width:100%; padding:16px; background:#fff; color:#ee5253;
+  border:2px solid #ffd93d; border-radius:12px; font-size:1rem;
+  font-weight:900; cursor:pointer; text-transform:uppercase;
+  margin-top:10px;
+}
+
+/* APP */
+.app { height:100vh; display:flex; flex-direction:column; padding:12px; gap:12px; }
+.app.hidden { display:none; }
+.header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 22px; background:#fff; border:2px solid #ffd93d;
+  border-radius:16px; flex-wrap:wrap; gap:10px;
+}
+.logo { font-weight:900; color:#ee5253; font-size:1.15rem; }
+.room-badge {
+  display:flex; align-items:center; gap:8px;
+  background:linear-gradient(135deg,#ffd93d,#f6c90e);
+  border:2px solid #f6c90e; padding:8px 16px; border-radius:12px;
+}
+.room-badge .lbl { font-size:0.6rem; font-weight:800; color:#6b5a00; }
+.room-badge .code { font-family:'Courier New',monospace; font-size:1.1rem; font-weight:900; letter-spacing:3px; }
+.btn-icon {
+  width:40px; height:40px; border-radius:10px; border:2px solid #ffd93d;
+  background:#fff; cursor:pointer; font-size:1.1rem;
+}
+
+.main { flex:1; display:grid; grid-template-columns:1fr 380px; gap:12px; min-height:0; }
+@media (max-width:960px) { .main { grid-template-columns:1fr; overflow-y:auto; } }
+
+/* STAGE */
+.stage {
+  background:#fff; border:3px solid #ff6b6b; border-radius:20px;
+  padding:22px; display:flex; flex-direction:column; gap:14px;
+  position:relative; overflow:hidden; min-height:0;
+}
+.stage::before {
+  content:''; position:absolute; inset:0;
+  background:conic-gradient(from 0deg at 50% 50%, transparent, rgba(255,217,61,0.06), transparent, rgba(255,107,107,0.06), transparent);
+  animation:spin 30s linear infinite; pointer-events:none;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.stage-title { font-size:0.8rem; color:#ee5253; letter-spacing:3px; font-weight:800; position:relative; z-index:1; }
+.chip { font-size:0.7rem; font-weight:800; padding:6px 14px; border-radius:20px; text-transform:uppercase; }
+.chip.stby { background:rgba(107,107,107,0.15); color:#6b6b6b; }
+.chip.siap { background:rgba(38,222,129,0.2); color:#20bf6b; animation:pulse 1s infinite; }
+.chip.hit { background:rgba(238,82,83,0.2); color:#ee5253; }
+@keyframes pulse { 50% { opacity:0.4; } }
+
+/* TIMER */
+.timer-box {
+  background:linear-gradient(135deg,#fff8e7,#ffeaa7);
+  border:3px solid #ffd93d; border-radius:16px;
+  padding:16px; position:relative; z-index:1;
+}
+.timer-box .tb-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.timer-box .tb-label { font-size:0.72rem; font-weight:900; color:#ee5253; letter-spacing:1.5px; text-transform:uppercase; }
+.timer-box .tb-time {
+  font-family:'Courier New',monospace; font-size:2.6rem; font-weight:900;
+  color:#2d2d2d; text-align:center; line-height:1;
+}
+.timer-box .tb-time.warning { color:#ee5253; animation:pulse 0.5s infinite; }
+.timer-box .tb-time.danger { color:#ff0000; animation:pulse 0.3s infinite; }
+.progress-bar { height:10px; background:#ffeaa7; border-radius:5px; overflow:hidden; margin-top:10px; }
+.progress-bar .fill { height:100%; background:linear-gradient(90deg,#26de81,#20bf6b); transition:width 0.3s, background 0.3s; }
+.progress-bar .fill.warning { background:linear-gradient(90deg,#ffd93d,#f6c90e); }
+.progress-bar .fill.danger { background:linear-gradient(90deg,#ff6b6b,#ee5253); }
+.timer-controls { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+.timer-controls button {
+  flex:1; padding:8px; border-radius:8px; border:none;
+  font-family:inherit; font-weight:900; font-size:0.7rem;
+  cursor:pointer; text-transform:uppercase;
+}
+.timer-controls .tc-start { background:linear-gradient(135deg,#26de81,#20bf6b); color:white; }
+.timer-controls .tc-pause { background:#ffd93d; color:#2d2d2d; }
+.timer-controls .tc-reset { background:#ff6b6b; color:white; }
+
+/* BUZZER */
+.big-buzzer { position:relative; z-index:1; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+.idle-display .idle-icon { font-size:5rem; margin-bottom:14px; }
+.idle-display .idle-text {
+  font-size:clamp(1.4rem,3.5vw,2.4rem); font-weight:900;
+  background:linear-gradient(90deg,#ee5253,#f6c90e,#ee5253);
+  background-size:200% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+  animation:shine 3s linear infinite;
+}
+.idle-display .idle-sub { color:#6b6b6b; font-size:0.95rem; margin-top:8px; }
+.active-display { display:none; flex-direction:column; align-items:center; }
+.active-display.show { display:flex; animation:zoomIn 0.5s; }
+@keyframes zoomIn { from { transform:scale(0.4); opacity:0; } to { transform:scale(1); opacity:1; } }
+.buzzer-badge {
+  font-size:1.2rem; font-weight:900; padding:12px 34px; border-radius:100px;
+  letter-spacing:2px; margin-bottom:16px; text-transform:uppercase; color:white;
+  box-shadow:0 0 40px currentColor;
+}
+.buzzer-name {
+  font-size:clamp(2.2rem,7vw,5rem); font-weight:900; line-height:1;
+  text-shadow:0 4px 30px currentColor;
+}
+
+/* LEADERBOARD */
+.leaderboard {
+  background:#fff8e7; border-radius:14px; padding:12px 14px;
+  border:2px dashed #ffd93d; position:relative; z-index:1;
+}
+.leaderboard h4 { font-size:0.72rem; color:#ee5253; letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; }
+.lb-row { display:flex; align-items:center; gap:8px; padding:5px 0; }
+.lb-rank { width:24px; text-align:center; font-weight:900; color:#ee5253; }
+.lb-dot { width:10px; height:10px; border-radius:50%; }
+.lb-name { flex:1; font-weight:800; }
+.lb-score { font-weight:900; color:#ee5253; font-family:'Courier New',monospace; }
+
+/* PANEL */
+.panel {
+  background:#fff; border:3px solid #ffd93d; border-radius:20px;
+  padding:16px; display:flex; flex-direction:column; gap:10px;
+  overflow-y:auto;
+}
+.panel h2 { font-size:0.9rem; color:#ee5253; letter-spacing:2px; text-transform:uppercase; }
+
+.joined-panel {
+  background:linear-gradient(135deg,#e8fff5,#d4f8e8);
+  border:2px dashed #26de81; border-radius:14px; padding:12px;
+}
+.joined-panel h3 { font-size:0.72rem; color:#20bf6b; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; display:flex; justify-content:space-between; }
+.joined-list { display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto; }
+.joined-item {
+  display:flex; justify-content:space-between; padding:6px 10px;
+  background:#fff; border-radius:6px; border-left:3px solid #26de81;
+  font-size:0.75rem;
+}
+.joined-item .ji-name { font-weight:900; }
+.joined-item .ji-dev { font-family:'Courier New',monospace; color:#6b6b6b; font-size:0.65rem; }
+
+.settings-panel {
+  background:linear-gradient(135deg,#fff8e7,#ffeaa7);
+  border:2px dashed #f6c90e; border-radius:14px; padding:14px;
+}
+.sp-header { display:flex; justify-content:space-between; margin-bottom:10px; }
+.sp-title { font-size:0.78rem; font-weight:900; color:#ee5253; }
+.sp-badge { background:#ee5253; color:white; padding:3px 10px; border-radius:20px; font-size:0.75rem; font-weight:900; }
+.stepper { display:flex; align-items:center; justify-content:space-between; background:#fff; border-radius:10px; padding:6px; border:2px solid #ffd93d; }
+.stepper button {
+  width:40px; height:40px; border-radius:8px; border:none; cursor:pointer;
+  font-size:1.4rem; font-weight:900; background:#ffeaa7; color:#ee5253;
+}
+.stepper button:disabled { opacity:0.3; cursor:not-allowed; }
+.stepper .value { flex:1; text-align:center; font-size:1.6rem; font-weight:900; color:#ee5253; font-family:'Courier New',monospace; }
+.quick-count { display:grid; grid-template-columns:repeat(8,1fr); gap:4px; margin-top:8px; }
+.quick-count button {
+  padding:6px 0; border-radius:6px; border:2px solid #ffeaa7;
+  background:#fff; font-weight:900; font-size:0.72rem; cursor:pointer;
+}
+.quick-count button.active { background:linear-gradient(135deg,#ffd93d,#f6c90e); border-color:#f6c90e; }
+
+.teams-list { display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto; }
+.team-row {
+  display:flex; align-items:center; gap:8px; padding:10px 12px;
+  background:#fff8e7; border-radius:10px; border-left:4px solid #b8b8b8;
+}
+.team-row.active { border-left-color:#ffd93d; background:#fff3b0; }
+.team-row .num { width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:7px; font-weight:900; font-size:0.8rem; color:white; }
+.team-row .name { flex:1; font-weight:800; font-size:0.85rem; }
+.team-row .score { font-family:'Courier New',monospace; font-weight:900; color:#ee5253; }
+.team-row .release-btn {
+  background:#fff; border:1.5px solid #ff6b6b; color:#ee5253;
+  border-radius:6px; padding:3px 8px; font-size:0.65rem; font-weight:900; cursor:pointer;
+}
+
+.ctrl-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ctrl-btn {
+  padding:12px 8px; border-radius:10px; border:none; font-family:inherit;
+  font-weight:900; font-size:0.72rem; cursor:pointer; color:white;
+  text-transform:uppercase; letter-spacing:0.5px;
+}
+.ctrl-btn:disabled { opacity:0.4; cursor:not-allowed; }
+.ctrl-btn.arm { background:linear-gradient(135deg,#26de81,#20bf6b); }
+.ctrl-btn.reset { background:linear-gradient(135deg,#ffd93d,#f6c90e); color:#2d2d2d; }
+.ctrl-btn.lock { background:linear-gradient(135deg,#ff6b6b,#ee5253); }
+.ctrl-btn.correct { background:linear-gradient(135deg,#26de81,#20bf6b); }
+.ctrl-btn.wrong { background:linear-gradient(135deg,#ff6b6b,#ee5253); }
+.ctrl-btn.code-reset { background:linear-gradient(135deg,#a55eea,#8e44ad); }
+.ctrl-btn.qr-btn { background:linear-gradient(135deg,#45aaf2,#2d98da); }
+.ctrl-btn.secondary { background:#fff; color:#2d2d2d; border:2px solid #ffd93d; }
+
+/* MODAL */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(45,27,46,0.7);
+  backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center;
+  z-index:200; padding:16px; overflow-y:auto;
+}
+.modal-overlay.hidden { display:none; }
+.modal {
+  background:#fff; border:3px solid #ffd93d; border-radius:24px;
+  padding:30px; max-width:560px; width:100%; max-height:90vh; overflow-y:auto;
+}
+.modal h2 { font-size:1.5rem; color:#ee5253; margin-bottom:6px; text-align:center; }
+.modal .sub { text-align:center; color:#6b6b6b; margin-bottom:22px; font-size:0.88rem; }
+
+.qr-modal-body { display:flex; flex-direction:column; align-items:center; gap:16px; padding:10px 0; }
+.qr-frame {
+  background:#fff; padding:20px; border-radius:16px;
+  border:4px dashed #ff6b6b; box-shadow:0 8px 30px rgba(238,82,83,0.2);
+}
+#qrCanvas { display:block; width:260px; height:260px; }
+.qr-code-text {
+  font-family:'Courier New',monospace; font-size:2rem; font-weight:900;
+  letter-spacing:6px; color:#ee5253;
+  background:#fff8e7; padding:10px 24px; border-radius:12px;
+  border:2px solid #ffd93d;
+}
+.qr-link {
+  font-size:0.72rem; color:#6b6b6b; word-break:break-all;
+  text-align:center; max-width:100%; padding:0 10px;
+  font-family:'Courier New',monospace;
+}
+.qr-hint { font-size:0.82rem; color:#6b6b6b; text-align:center; line-height:1.5; max-width:340px; }
+.qr-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; max-width:340px; }
+
+.btn-primary {
+  width:100%; padding:14px; background:linear-gradient(135deg,#ff6b6b,#ee5253);
+  border:none; border-radius:12px; color:white; font-size:0.9rem;
+  font-weight:900; cursor:pointer; text-transform:uppercase;
+}
+.btn-secondary-sm {
+  width:100%; padding:14px; background:#fff; color:#ee5253;
+  border:2px solid #ffd93d; border-radius:12px; font-size:0.9rem;
+  font-weight:900; cursor:pointer; text-transform:uppercase;
+}
+
+/* TOAST */
+.toast {
+  position:fixed; top:24px; left:50%; transform:translateX(-50%) translateY(-100px);
+  background:#fff; border:3px solid #ff6b6b; border-radius:14px;
+  padding:14px 26px; font-weight:800; z-index:300; font-size:0.9rem;
+  transition:transform 0.3s; max-width:90vw; text-align:center;
+}
+.toast.show { transform:translateX(-50%) translateY(0); }
+.toast.ok { border-color:#26de81; }
+.toast.warn { border-color:#ffd93d; }
+.toast.error { border-color:#ee5253; }
+
+/* STATUS */
+.status-bar {
+  position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
+  background:#fff; border:2px solid #ffd93d; border-radius:20px;
+  padding:6px 16px; font-size:0.7rem; font-weight:800; color:#6b6b6b;
+  z-index:50; display:flex; gap:12px; align-items:center;
+}
+.status-dot { width:8px; height:8px; border-radius:50%; background:#999; }
+.status-dot.on { background:#26de81; animation:pulse 1.5s infinite; }
+.status-dot.off { background:#ee5253; }
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+  <h1>🎯 SMART BUZZER</h1>
+  <p class="sub">Panel Juri — buat room, tampilkan QR, kontrol permainan</p>
+  <div class="setup-card">
+    <h2>👨‍⚖️ Masuk sebagai Juri</h2>
+    <p class="sub2">Buat room baru, atau gabung sebagai juri pendukung dengan kode room.</p>
+    <label>Kode Room (kosongkan untuk buat baru)</label>
+    <input type="text" id="juriRoomCodeInput" placeholder="Contoh: 482913" maxlength="6" inputmode="numeric">
+    <button class="btn-start" onclick="joinAsJuri()">MASUK / BUAT ROOM</button>
+    <button class="btn-secondary" onclick="window.location.href='peserta.html'">Saya Peserta →</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app hidden" id="app">
+  <div class="header">
+    <div class="logo">🎯 SMART BUZZER — JURI</div>
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <div class="room-badge">
+        <div>
+          <div class="lbl">KODE ROOM</div>
+          <div class="code" id="roomCodeDisplay">------</div>
+        </div>
+      </div>
+      <button class="btn-icon" title="Keluar" onclick="location.reload()">🚪</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- STAGE -->
+    <div class="stage" id="stage">
+      <div style="display:flex; justify-content:space-between; align-items:center; position:relative; z-index:1; flex-wrap:wrap; gap:10px;">
+        <div class="stage-title">🔴 MONITOR PESERTA</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span class="chip stby" id="statusChip">STANDBY</span>
+          <span class="chip" id="roundChip" style="display:none;">Ronde 1</span>
+        </div>
+      </div>
+
+      <div class="timer-box" id="roundTimerBox">
+        <div class="tb-header">
+          <div class="tb-label">⏱ TIMER RONDE</div>
+          <div style="font-size:0.7rem; color:#6b6b6b;" id="roundTimerInfo">30s</div>
+        </div>
+        <div class="tb-time" id="roundTimerDisplay">--:--</div>
+        <div class="progress-bar"><div class="fill" id="roundTimerFill" style="width:0%"></div></div>
+        <div class="timer-controls">
+          <button class="tc-start" onclick="startRoundTimer()">▶ Start</button>
+          <button class="tc-pause" onclick="pauseTimer()">⏸ Pause</button>
+          <button class="tc-reset" onclick="resetTimer('round')">🔄 Reset</button>
+        </div>
+      </div>
+
+      <div class="timer-box" id="answerTimerBox" style="display:none;">
+        <div class="tb-header">
+          <div class="tb-label">⏱ TIMER JAWAB</div>
+          <div style="font-size:0.7rem; color:#6b6b6b;" id="answerTimerInfo">15s</div>
+        </div>
+        <div class="tb-time" id="answerTimerDisplay">--:--</div>
+        <div class="progress-bar"><div class="fill" id="answerTimerFill" style="width:0%"></div></div>
+      </div>
+
+      <div class="big-buzzer">
+        <div class="idle-display" id="idleDisplay">
+          <div class="idle-icon">⏳</div>
+          <div class="idle-text" id="idleText">MENUNGGU JURI</div>
+          <div class="idle-sub" id="idleSub">Bel akan dibuka ketika juri menekan ARM</div>
+        </div>
+        <div class="active-display" id="activeDisplay">
+          <div class="buzzer-badge" id="activeBadge">🔔 BEL DITEKAN</div>
+          <div class="buzzer-name" id="activeName">TIM</div>
+        </div>
+      </div>
+
+      <div class="leaderboard">
+        <h4>🏆 Klasemen</h4>
+        <div id="lbContent"></div>
+      </div>
+    </div>
+
+    <!-- PANEL -->
+    <div class="panel" id="juriPanel">
+      <h2>👨‍⚖️ Panel Juri</h2>
+
+      <div style="font-size:0.72rem; font-weight:800; color:#a55eea; text-align:center; padding:8px; background:#f5e8ff; border-radius:8px;" id="juriInfo">
+        👑 JURI UTAMA
+      </div>
+
+      <div class="joined-panel">
+        <h3>🟢 Peserta Masuk <span id="joinedCount" style="background:#26de81; color:white; padding:2px 8px; border-radius:10px; font-size:0.65rem;">0</span></h3>
+        <div class="joined-list" id="joinedList">
+          <div style="text-align:center; color:#999; font-size:0.72rem; padding:8px;">Belum ada peserta</div>
+        </div>
+      </div>
+
+      <div class="settings-panel">
+        <div class="sp-header">
+          <div class="sp-title">👥 Jumlah Kelompok</div>
+          <div class="sp-badge" id="teamCountBadge">2</div>
+        </div>
+        <div class="stepper">
+          <button onclick="changeTeamCount(-1)" id="btnMinus">−</button>
+          <div class="value" id="teamCountValue">2</div>
+          <button onclick="changeTeamCount(1)" id="btnPlus">+</button>
+        </div>
+        <div class="quick-count" id="quickCountBox"></div>
+      </div>
+
+      <div class="teams-list" id="teamsList"></div>
+
+      <div class="ctrl-actions">
+        <button class="ctrl-btn code-reset" onclick="resetRoomCode()">🔑 RESET KODE</button>
+        <button class="ctrl-btn secondary" onclick="kickAll()">🚫 KELUARKAN SEMUA</button>
+      </div>
+
+      <div class="ctrl-actions" style="grid-template-columns:1fr;">
+        <button class="ctrl-btn qr-btn" onclick="showQRCode()">📱 TAMPILKAN QR CODE</button>
+      </div>
+
+      <div class="ctrl-actions">
+        <button class="ctrl-btn arm" id="armBtn" onclick="armBuzzer()">🔓 ARM</button>
+        <button class="ctrl-btn reset" onclick="resetRound()">🔄 RESET</button>
+        <button class="ctrl-btn lock" onclick="lockBuzzer()">🔒 LOCK</button>
+      </div>
+
+      <div class="ctrl-actions" id="evalActions" style="display:none;">
+        <button class="ctrl-btn correct" onclick="evaluate(true)">✅ BENAR (+10)</button>
+        <button class="ctrl-btn wrong" onclick="evaluate(false)">❌ SALAH (-5)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL QR -->
+<div class="modal-overlay hidden" id="qrModal">
+  <div class="modal">
+    <h2>📱 Scan QR untuk Masuk</h2>
+    <p class="sub">Peserta scan QR ini dengan kamera HP — link otomatis terbuka.</p>
+    <div class="qr-modal-body">
+      <div class="qr-frame"><div id="qrCanvas"></div></div>
+      <div class="qr-code-text" id="qrCodeText">------</div>
+      <div class="qr-link" id="qrLink"></div>
+      <div class="qr-hint">
+        💡 <strong>Cara pakai:</strong><br>
+        Buka kamera HP → arahkan ke QR → tap notifikasi link → halaman peserta terbuka dengan kode terisi.
+      </div>
+      <div class="qr-actions">
+        <button class="btn-primary" onclick="copyRoomLink()">📋 SALIN LINK</button>
+        <button class="btn-secondary-sm" onclick="closeModals()">TUTUP</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="status-bar">
+  <span class="status-dot" id="netDot"></span>
+  <span id="netText">Offline</span>
+  <span id="peerText" style="color:#6b6b6b;"></span>
+</div>
+
+<script>
+const TEAM_COLORS = ['#ff4757','#ff9f43','#26de81','#45aaf2','#a55eea','#fd79a8','#f6c90e','#4ecdc4','#dfe6e9'];
+const TEAM_NAMES  = ['Merah','Oranye','Hijau','Biru','Ungu','Pink','Kuning','Tosca','Putih'];
+const MIN_TEAMS = 2;
+const MAX_TEAMS = 9;
+
+const state = {
+  role: 'juri',
+  roomCode: null,
+  deviceId: localStorage.getItem('sb_juri_device') || (() => {
+    const id = 'JURI-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+    localStorage.setItem('sb_juri_device', id);
+    return id;
+  })(),
+  teams: [],
+  devices: {},
+  totalReguAktif: 2,
+  buzzerArmed: false,
+  activeTeam: null,
+  roundNumber: 0,
+  roundTimer: null,
+  answerTimer: null,
+  settings: { roundDuration: 30, answerDuration: 15 },
+  history: [],
+  isPrimary: true,
+  bc: null,
+  peer: null,
+  connections: {},
+  lastBuzzTeam: null,
+  _timerInt: null,
+  _lastTick: null
+};
+
+function generateRoomCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function saveRoom() {
+  try {
+    localStorage.setItem('sb_room_' + state.roomCode, JSON.stringify({
+      roomCode: state.roomCode,
+      teams: state.teams,
+      totalReguAktif: state.totalReguAktif,
+      devices: state.devices,
+      buzzerArmed: state.buzzerArmed,
+      activeTeam: state.activeTeam,
+      roundNumber: state.roundNumber,
+      roundTimer: state.roundTimer ? { endsAt: state.roundTimer.endsAt, duration: state.roundTimer.duration } : null,
+      answerTimer: state.answerTimer ? { endsAt: state.answerTimer.endsAt, duration: state.answerTimer.duration, teamId: state.answerTimer.teamId } : null,
+      settings: state.settings,
+      history: state.history.slice(-20),
+      lastBuzzTeam: state.lastBuzzTeam,
+      hostDeviceId: state.deviceId
+    }));
+  } catch (_) {}
+}
+
+function loadRoom(code) {
+  try {
+    const raw = localStorage.getItem('sb_room_' + code);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_) { return null; }
+}
+
+/* BROADCAST */
+function initBC() {
+  if ('BroadcastChannel' in window) {
+    try {
+      state.bc = new BroadcastChannel('smartbuzzer_v3');
+      state.bc.onmessage = (ev) => handleBusMessage(ev.data);
+    } catch (_) {}
+  }
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'sb_bus_msg' && e.newValue) {
+      try { handleBusMessage(JSON.parse(e.newValue)); } catch (_) {}
+    }
+  });
+}
+
+function busSend(msg) {
+  if (state.bc) { try { state.bc.postMessage(msg); } catch (_) {} }
+  try { localStorage.setItem('sb_bus_msg', JSON.stringify({ ...msg, _ts: Date.now() })); } catch (_) {}
+  Object.values(state.connections).forEach(conn => {
+    if (conn && conn.open) { try { conn.send(msg); } catch (_) {} }
+  });
+}
+
+function handleBusMessage(msg) {
+  if (!msg || !msg.type) return;
+  if (msg.from === state.deviceId) return;
+
+  switch (msg.type) {
+    case 'PESERTA_JOIN':
+      if (msg.roomCode !== state.roomCode) return;
+      if (!state.devices[msg.deviceId] && Object.keys(state.devices).length >= state.totalReguAktif) {
+        busSend({ type:'PESERTA_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Room penuh' });
+        return;
+      }
+      state.devices[msg.deviceId] = {
+        deviceId: msg.deviceId, teamId: null, teamName: null, joinedAt: Date.now()
+      };
+      saveRoom();
+      busSend({ type: 'STATE_FULL', from: state.deviceId, to: msg.deviceId, roomCode: state.roomCode });
+      renderJuriPanel();
+      renderJoined();
+      showToast(`🟢 Peserta ${msg.deviceId} masuk`, 'ok');
+      break;
+
+    case 'PESERTA_CLAIM':
+      if (msg.roomCode !== state.roomCode) return;
+      const occupant = Object.values(state.devices).find(d => d.teamId === msg.teamId && d.deviceId !== msg.deviceId);
+      if (occupant) {
+        busSend({ type:'PESERTA_CLAIM_REJECT', from: state.deviceId, to: msg.deviceId, teamId: msg.teamId, reason: 'Regu sudah dipakai' });
+        return;
+      }
+      if (state.devices[msg.deviceId]) {
+        state.devices[msg.deviceId].teamId = msg.teamId;
+        state.devices[msg.deviceId].teamName = state.teams[msg.teamId].name;
+      }
+      saveRoom();
+      busSend({ type:'PESERTA_CLAIM_ACCEPT', from: state.deviceId, to: msg.deviceId, teamId: msg.teamId });
+      renderJuriPanel();
+      renderJoined();
+      showToast(`✅ ${msg.deviceId} → ${state.teams[msg.teamId].name}`, 'ok');
+      break;
+
+    case 'PESERTA_BUZZ':
+      if (msg.roomCode !== state.roomCode) return;
+      if (!state.buzzerArmed) {
+        busSend({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Bel belum dibuka' });
+        return;
+      }
+      if (state.activeTeam !== null) {
+        busSend({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Sudah ada yang lebih dulu' });
+        return;
+      }
+      const p = state.devices[msg.deviceId];
+      if (!p || p.teamId === null) {
+        busSend({ type:'PESERTA_BUZZ_REJECT', from: state.deviceId, to: msg.deviceId, reason: 'Pilih regu dulu' });
+        return;
+      }
+      state.activeTeam = p.teamId;
+      state.buzzerArmed = false;
+      state.roundTimer = null;
+      state.answerTimer = { endsAt: Date.now() + state.settings.answerDuration * 1000, duration: state.settings.answerDuration, teamId: p.teamId };
+
+      // Auto-ganti kode jika regu berbeda
+      let codeChanged = false;
+      if (state.lastBuzzTeam !== null && state.lastBuzzTeam !== p.teamId) {
+        const oldCode = state.roomCode;
+        let newCode;
+        do { newCode = generateRoomCode(); } while (loadRoom(newCode));
+        state.roomCode = newCode;
+        codeChanged = true;
+        busSend({ type: 'CODE_CHANGED', from: state.deviceId, oldCode, newCode });
+        document.getElementById('roomCodeDisplay').textContent = newCode;
+        showToast('🔑 Kode room berganti: ' + newCode, 'ok');
+        if (!document.getElementById('qrModal').classList.contains('hidden')) showQRCode();
+      }
+      state.lastBuzzTeam = p.teamId;
+      state.history.push({ time: Date.now(), teamId: p.teamId, teamName: state.teams[p.teamId].name });
+      saveRoom();
+      busSend({ type:'PESERTA_BUZZ_ACCEPT', from: state.deviceId, to: msg.deviceId, teamId: p.teamId, codeChanged });
+      busSend({ type:'STATE_FULL', from: state.deviceId, roomCode: state.roomCode });
+
+      renderJuriPanel();
+      renderStage();
+      SFX.buzz(p.teamId);
+      showToast('🔔 ' + state.teams[p.teamId].name + ' menekan bel!', 'ok');
+      break;
+
+    case 'PESERTA_LEAVE':
+      if (state.devices[msg.deviceId]) {
+        delete state.devices[msg.deviceId];
+        saveRoom();
+        renderJuriPanel();
+        renderJoined();
+      }
+      break;
+  }
+}
+
+/* PEERJS */
+function initPeer() {
+  return new Promise((resolve) => {
+    if (typeof Peer === 'undefined') { resolve(null); return; }
+    try {
+      state.peer = new Peer('sb-host-' + state.roomCode, {
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
+      });
+      state.peer.on('open', (id) => {
+        console.log('PeerJS host:', id);
+        updateNetStatus(true);
+        resolve(state.peer);
+      });
+      state.peer.on('error', (err) => {
+        console.warn('PeerJS error:', err.type);
+        updateNetStatus(false);
+        resolve(null);
+      });
+      state.peer.on('connection', (conn) => {
+        conn.on('open', () => {
+          state.connections[conn.peer] = conn;
+          conn.on('data', (data) => handleBusMessage({ ...data, from: conn.peer }));
+          updatePeerCount();
+        });
+        conn.on('close', () => {
+          delete state.connections[conn.peer];
+          updatePeerCount();
+        });
+      });
+      setTimeout(() => resolve(state.peer), 4000);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+function updateNetStatus(ok) {
+  const dot = document.getElementById('netDot');
+  const txt = document.getElementById('netText');
+  if (dot) dot.className = 'status-dot ' + (ok ? 'on' : 'off');
+  if (txt) txt.textContent = ok ? 'Online (P2P)' : 'Offline (lokal)';
+}
+function updatePeerCount() {
+  const el = document.getElementById('peerText');
+  if (el) el.textContent = `• ${Object.keys(state.connections).length} peer`;
+}
+
+/* INIT */
+function initTeams(n) {
+  state.teams = [];
+  for (let i = 0; i < n; i++) {
+    state.teams.push({ id:i, name:'Regu '+TEAM_NAMES[i], color:TEAM_COLORS[i], score:0 });
+  }
+}
+
+async function joinAsJuri() {
+  const code = document.getElementById('juriRoomCodeInput').value.trim();
+
+  if (!code) {
+    state.roomCode = generateRoomCode();
+    initTeams(MIN_TEAMS);
+    state.totalReguAktif = MIN_TEAMS;
+    state.isPrimary = true;
+    saveRoom();
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('roomCodeDisplay').textContent = state.roomCode;
+    renderJuriPanel();
+    renderJoined();
+    renderStage();
+    startTimerLoop();
+    showToast('✅ Room dibuat. Kode: ' + state.roomCode, 'ok');
+    await initPeer();
+    updateURL();
+  } else {
+    const saved = loadRoom(code);
+    if (!saved) {
+      showToast('❌ Kode room tidak ditemukan di perangkat ini.', 'error');
+      return;
+    }
+    state.roomCode = code;
+    state.teams = saved.teams;
+    state.totalReguAktif = saved.totalReguAktif;
+    state.devices = saved.devices || {};
+    state.settings = saved.settings || state.settings;
+    state.isPrimary = false;
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('roomCodeDisplay').textContent = state.roomCode;
+    document.getElementById('juriInfo').textContent = '👥 JURI PENDUKUNG';
+    renderJuriPanel();
+    renderJoined();
+    renderStage();
+    startTimerLoop();
+    showToast('✅ Masuk sebagai JURI PENDUKUNG', 'ok');
+    await initPeer();
+    updateURL();
+  }
+}
+
+function updateURL() {
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set('room', state.roomCode);
+    history.replaceState(null, '', url.toString());
+  } catch (_) {}
+}
+
+/* RENDER STAGE */
+function renderStage() {
+  const chip = document.getElementById('statusChip');
+  chip.className = 'chip';
+  if (state.buzzerArmed) { chip.classList.add('siap'); chip.textContent = '🟢 SIAP'; }
+  else if (state.activeTeam !== null) { chip.classList.add('hit'); chip.textContent = '🔴 DITEKAN'; }
+  else { chip.classList.add('stby'); chip.textContent = 'STANDBY'; }
+
+  const rc = document.getElementById('roundChip');
+  if (state.roundNumber > 0) { rc.style.display = 'inline-block'; rc.textContent = 'Ronde ' + state.roundNumber; }
+  else rc.style.display = 'none';
+
+  if (state.activeTeam !== null) {
+    const t = state.teams[state.activeTeam];
+    document.getElementById('idleDisplay').style.display = 'none';
+    const active = document.getElementById('activeDisplay');
+    active.classList.add('show');
+    active.style.color = t.color;
+    document.getElementById('activeBadge').textContent = '🔔 BEL DITEKAN';
+    document.getElementById('activeBadge').style.background = t.color;
+    document.getElementById('activeName').textContent = t.name;
+    document.getElementById('activeName').style.color = t.color;
+  } else {
+    document.getElementById('idleDisplay').style.display = 'flex';
+    document.getElementById('activeDisplay').classList.remove('show');
+    document.getElementById('idleText').textContent = state.buzzerArmed ? 'BEL TERBUKA!' : 'MENUNGGU JURI';
+    document.getElementById('idleSub').textContent = state.buzzerArmed ? 'Tekan tombol bel secepat mungkin!' : 'Bel akan dibuka ketika juri menekan ARM';
+  }
+
+  const lb = document.getElementById('lbContent');
+  lb.innerHTML = '';
+  const active = state.teams.slice(0, state.totalReguAktif);
+  const sorted = [...active].sort((a, b) => b.score - a.score);
+  sorted.forEach((t, i) => {
+    const row = document.createElement('div');
+    row.className = 'lb-row';
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    row.innerHTML = `
+      <span class="lb-rank">${medal}</span>
+      <span class="lb-dot" style="background:${t.color}"></span>
+      <span class="lb-name">${t.name}</span>
+      <span class="lb-score">${t.score}</span>
+    `;
+    lb.appendChild(row);
+  });
+}
+
+/* RENDER PANEL */
+function renderJuriPanel() {
+  document.getElementById('teamCountBadge').textContent = state.totalReguAktif;
+  document.getElementById('teamCountValue').textContent = state.totalReguAktif;
+  document.getElementById('btnMinus').disabled = state.totalReguAktif <= MIN_TEAMS;
+  document.getElementById('btnPlus').disabled = state.totalReguAktif >= MAX_TEAMS;
+
+  const qc = document.getElementById('quickCountBox');
+  qc.innerHTML = '';
+  for (let n = MIN_TEAMS; n <= MAX_TEAMS; n++) {
+    const b = document.createElement('button');
+    b.textContent = n;
+    if (n === state.totalReguAktif) b.classList.add('active');
+    b.onclick = () => changeTeamCount(n - state.totalReguAktif);
+    qc.appendChild(b);
+  }
+
+  const tl = document.getElementById('teamsList');
+  tl.innerHTML = '';
+  state.teams.forEach((t, i) => {
+    const active = i < state.totalReguAktif;
+    const occupant = Object.values(state.devices).find(d => d.teamId === i);
+    const row = document.createElement('div');
+    row.className = 'team-row' + (active ? '' : ' inactive');
+    row.innerHTML = `
+      <div class="num" style="background:${t.color}">${i + 1}</div>
+      <div class="name">${t.name}${!active ? ' (nonaktif)' : ''}</div>
+      <span style="font-size:0.65rem; font-weight:800; color:${occupant ? '#20bf6b' : '#999'}">${occupant ? '● ON' : '○ OFF'}</span>
+      ${occupant ? `<button class="release-btn" onclick="releaseTeam(${i})">Lepas</button>` : ''}
+      <div class="score">${t.score}</div>
+    `;
+    tl.appendChild(row);
+  });
+
+  document.getElementById('armBtn').disabled = state.buzzerArmed;
+  document.getElementById('evalActions').style.display = state.activeTeam !== null ? 'grid' : 'none';
+}
+
+function renderJoined() {
+  const jl = document.getElementById('joinedList');
+  const jc = document.getElementById('joinedCount');
+  const joined = Object.values(state.devices).filter(d => d.teamId !== null);
+  jc.textContent = joined.length;
+  jl.innerHTML = '';
+  if (joined.length === 0) {
+    jl.innerHTML = '<div style="text-align:center; color:#999; font-size:0.72rem; padding:8px;">Belum ada peserta</div>';
+  } else {
+    joined.forEach(d => {
+      const t = state.teams[d.teamId];
+      const item = document.createElement('div');
+      item.className = 'joined-item';
+      item.innerHTML = `
+        <span class="ji-name" style="color:${t ? t.color : '#999'}">${t ? t.name : '?'}</span>
+        <span class="ji-dev">${d.deviceId}</span>
+      `;
+      jl.appendChild(item);
+    });
+  }
+}
+
+/* TIMER */
+function startTimerLoop() {
+  if (state._timerInt) clearInterval(state._timerInt);
+  state._timerInt = setInterval(tickTimers, 100);
+  tickTimers();
+}
+
+function tickTimers() {
+  if (state.roundTimer) {
+    const remaining = Math.max(0, Math.ceil((state.roundTimer.endsAt - Date.now()) / 1000));
+    const pct = Math.max(0, (state.roundTimer.endsAt - Date.now()) / (state.roundTimer.duration * 1000)) * 100;
+    const disp = document.getElementById('roundTimerDisplay');
+    disp.textContent = formatTime(remaining);
+    disp.classList.toggle('warning', remaining <= 10 && remaining > 5);
+    disp.classList.toggle('danger', remaining <= 5);
+    const fill = document.getElementById('roundTimerFill');
+    fill.style.width = pct + '%';
+    fill.classList.toggle('warning', remaining <= 10 && remaining > 5);
+    fill.classList.toggle('danger', remaining <= 5);
+    if (remaining <= 10 && remaining > 0 && state._lastTick !== remaining) {
+      state._lastTick = remaining;
+      SFX.click();
+    }
+  } else {
+    document.getElementById('roundTimerDisplay').textContent = '--:--';
+    document.getElementById('roundTimerFill').style.width = '0%';
+  }
+  document.getElementById('roundTimerInfo').textContent = state.settings.roundDuration + 's';
+
+  if (state.answerTimer) {
+    document.getElementById('answerTimerBox').style.display = 'block';
+    const remaining = Math.max(0, Math.ceil((state.answerTimer.endsAt - Date.now()) / 1000));
+    const pct = Math.max(0, (state.answerTimer.endsAt - Date.now()) / (state.answerTimer.duration * 1000)) * 100;
+    document.getElementById('answerTimerDisplay').textContent = formatTime(remaining);
+    document.getElementById('answerTimerFill').style.width = pct + '%';
+  } else {
+    document.getElementById('answerTimerBox').style.display = 'none';
+  }
+}
+
+function formatTime(sec) {
+  if (sec < 0) sec = 0;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+/* AKSI */
+function armBuzzer() {
+  state.buzzerArmed = true;
+  state.activeTeam = null;
+  state.roundNumber++;
+  state.roundTimer = { endsAt: Date.now() + state.settings.roundDuration * 1000, duration: state.settings.roundDuration };
+  state.answerTimer = null;
+  saveRoom();
+  busSend({ type: 'ARM', from: state.deviceId, roomCode: state.roomCode });
+  renderJuriPanel();
+  renderStage();
+  SFX.click();
+  showToast('🔓 RONDE ' + state.roundNumber + ' — BEL DIBUKA!', 'ok');
+
+  setTimeout(() => {
+    if (state.roundTimer && Date.now() >= state.roundTimer.endsAt) {
+      state.buzzerArmed = false;
+      state.roundTimer = null;
+      saveRoom();
+      busSend({ type: 'RESET', from: state.deviceId });
+      renderJuriPanel();
+      renderStage();
+      showToast('⏰ Waktu ronde habis!', 'warn');
+    }
+  }, state.settings.roundDuration * 1000 + 100);
+}
+
+function evaluate(correct) {
+  if (state.activeTeam === null) return;
+  const t = state.teams[state.activeTeam];
+  if (correct) { t.score += 10; SFX.correct(); showToast('✅ ' + t.name + ' BENAR! +10', 'ok'); }
+  else { t.score = Math.max(0, t.score - 5); SFX.wrong(); showToast('❌ ' + t.name + ' SALAH! -5', 'warn'); }
+  state.activeTeam = null;
+  state.buzzerArmed = false;
+  state.roundTimer = null;
+  state.answerTimer = null;
+  saveRoom();
+  busSend({ type: 'EVALUATE', from: state.deviceId, roomCode: state.roomCode });
+  renderJuriPanel();
+  renderStage();
+}
+
+function resetRound() {
+  state.buzzerArmed = false;
+  state.activeTeam = null;
+  state.roundTimer = null;
+  state.answerTimer = null;
+  saveRoom();
+  busSend({ type: 'RESET', from: state.deviceId });
+  renderJuriPanel();
+  renderStage();
+  showToast('🔄 Ronde direset', 'ok');
+}
+
+function lockBuzzer() {
+  state.buzzerArmed = false;
+  state.activeTeam = null;
+  state.roundTimer = null;
+  state.answerTimer = null;
+  saveRoom();
+  busSend({ type: 'LOCK', from: state.deviceId });
+  renderJuriPanel();
+  renderStage();
+  showToast('🔒 Bel dikunci', 'ok');
+}
+
+function changeTeamCount(delta) {
+  const n = state.totalReguAktif + delta;
+  if (n < MIN_TEAMS || n > MAX_TEAMS) return;
+  setTeamCount(n);
+}
+
+function setTeamCount(n) {
+  const old = state.totalReguAktif;
+  state.totalReguAktif = n;
+  while (state.teams.length < n) {
+    const i = state.teams.length;
+    state.teams.push({ id:i, name:'Regu '+TEAM_NAMES[i], color:TEAM_COLORS[i], score:0 });
+  }
+  if (n < old) {
+    const toMove = Object.values(state.devices).filter(d => d.teamId !== null && d.teamId >= n);
+    toMove.forEach(d => {
+      let slot = -1;
+      for (let i = 0; i < n; i++) {
+        if (!Object.values(state.devices).some(q => q.teamId === i && q.deviceId !== d.deviceId)) { slot = i; break; }
+      }
+      if (slot === -1) delete state.devices[d.deviceId];
+      else { d.teamId = slot; d.teamName = state.teams[slot].name; }
+    });
+  }
+  saveRoom();
+  busSend({ type: 'TEAM_COUNT', from: state.deviceId, roomCode: state.roomCode });
+  renderJuriPanel();
+  renderJoined();
+  showToast(`👥 Jumlah kelompok: ${n}`, 'ok');
+  if (!document.getElementById('qrModal').classList.contains('hidden')) showQRCode();
+}
+
+function resetRoomCode() {
+  if (!confirm('Reset kode room? Semua peserta dikeluarkan.')) return;
+  const oldCode = state.roomCode;
+  try { localStorage.removeItem('sb_room_' + oldCode); } catch (_) {}
+  const newCode = generateRoomCode();
+  state.roomCode = newCode;
+  state.devices = {};
+  state.lastBuzzTeam = null;
+  saveRoom();
+  busSend({ type: 'CODE_CHANGED', from: state.deviceId, oldCode, newCode });
+  document.getElementById('roomCodeDisplay').textContent = newCode;
+  renderJuriPanel();
+  renderJoined();
+  showToast('🔑 Kode baru: ' + newCode, 'ok');
+  updateURL();
+  if (!document.getElementById('qrModal').classList.contains('hidden')) showQRCode();
+
+  // Re-init peer dengan ID baru
+  if (state.peer) try { state.peer.destroy(); } catch (_) {}
+  state.connections = {};
+  initPeer();
+}
+
+function kickAll() {
+  if (!confirm('Keluarkan semua peserta?')) return;
+  state.devices = {};
+  saveRoom();
+  busSend({ type: 'RESET', from: state.deviceId });
+  renderJuriPanel();
+  renderJoined();
+  showToast('🚫 Semua peserta dikeluarkan', 'warn');
+}
+
+function releaseTeam(teamId) {
+  const d = Object.values(state.devices).find(x => x.teamId === teamId);
+  if (!d) return;
+  if (!confirm('Lepas regu ini?')) return;
+  delete state.devices[d.deviceId];
+  saveRoom();
+  busSend({ type: 'TEAM_COUNT', from: state.deviceId });
+  renderJuriPanel();
+  renderJoined();
+  showToast('🔓 Regu dilepas', 'ok');
+}
+
+function startRoundTimer() {
+  state.roundTimer = { endsAt: Date.now() + state.settings.roundDuration * 1000, duration: state.settings.roundDuration };
+  saveRoom();
+  busSend({ type: 'ARM', from: state.deviceId });
+}
+
+function pauseTimer() {
+  state.roundTimer = null;
+  state.answerTimer = null;
+  saveRoom();
+  busSend({ type: 'RESET', from: state.deviceId });
+}
+
+function resetTimer(which) {
+  if (which === 'round') state.roundTimer = null;
+  if (which === 'answer') state.answerTimer = null;
+  saveRoom();
+}
+
+/* QR */
+function buildRoomURL() {
+  // Arahkan ke peserta.html dengan ?room=XXXXXX
+  const base = location.origin + location.pathname.replace(/juri\.html$/, 'peserta.html');
+  return base + '?room=' + state.roomCode;
+}
+
+function showQRCode() {
+  if (!state.roomCode) return showToast('⚠️ Room belum dibuat', 'warn');
+  const url = buildRoomURL();
+  document.getElementById('qrCodeText').textContent = state.roomCode;
+  document.getElementById('qrLink').textContent = url;
+
+  const canvasBox = document.getElementById('qrCanvas');
+  canvasBox.innerHTML = '';
+
+  if (typeof QRCode === 'undefined') {
+    canvasBox.innerHTML = '<div style="width:260px;height:260px;display:flex;align-items:center;justify-content:center;color:#999;font-size:0.8rem;text-align:center;padding:20px;">QR library tidak tersedia.<br>Gunakan link di bawah.</div>';
+  } else {
+    try {
+      new QRCode(canvasBox, {
+        text: url, width: 260, height: 260,
+        colorDark: '#2d2d2d', colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch (e) {
+      canvasBox.innerHTML = '<div style="width:260px;height:260px;display:flex;align-items:center;justify-content:center;color:#999;font-size:0.8rem;text-align:center;padding:20px;">Gagal membuat QR.<br>Gunakan link.</div>';
+    }
+  }
+  document.getElementById('qrModal').classList.remove('hidden');
+  SFX.click();
+}
+
+function copyRoomLink() {
+  const url = buildRoomURL();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => showToast('📋 Link tersalin!', 'ok'))
+      .catch(() => prompt('Salin link manual:', url));
+  } else {
+    prompt('Salin link manual:', url);
+  }
+}
+
+function closeModals() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+}
+
+/* SFX */
+const SFX = (() => {
+  let ctx = null;
+  function c() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function beep(freq, dur, type, gainVal) {
+    try {
+      const ac = c();
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = type || 'sine';
+      o.frequency.value = freq;
+      const t = ac.currentTime;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(gainVal || 0.4, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t); o.stop(t + dur);
+    } catch (_) {}
+  }
+  return {
+    click() { beep(800, 0.05, 'sine', 0.2); },
+    buzz(i) {
+      const b = 500 + (i || 0) * 60;
+      beep(b, 0.25, 'square', 0.5);
+      beep(b * 1.5, 0.3, 'square', 0.4);
+      beep(b * 2, 0.35, 'sawtooth', 0.3);
+    },
+    correct() { [523,659,784,1047].forEach((f,i) => setTimeout(() => beep(f, 0.18, 'sine', 0.4), i*80)); },
+    wrong() { beep(250, 0.2, 'sawtooth', 0.4); setTimeout(() => beep(180, 0.3, 'sawtooth', 0.4), 200); }
+  };
+})();
+
+let toastTimer = null;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+/* SHORTCUT */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'a' || e.key === 'A') armBuzzer();
+  if (e.key === 'r' || e.key === 'R') resetRound();
+  if (e.key === 'l' || e.key === 'L') lockBuzzer();
+  if (e.key === 'q' || e.key === 'Q') showQRCode();
+});
+
+initBC();
+updateNetStatus(false);
+
+// Auto-join jika URL punya ?room= dan ada room tersimpan
+try {
+  const params = new URLSearchParams(location.search);
+  const r = params.get('room');
+  if (r && loadRoom(r)) {
+    document.getElementById('juriRoomCodeInput').value = r;
+  }
+} catch (_) {}
+</script>
+</body>
+</html>
